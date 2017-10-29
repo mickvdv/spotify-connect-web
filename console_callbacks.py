@@ -1,14 +1,12 @@
 from __future__ import division
 import argparse
-import alsaaudio as alsa
 import json
 import Queue
 from threading import Thread
 import threading
 from connect_ffi import ffi, lib
 from lastfm import lastfm
-
-
+import alsaaudio as alsa
 RATE = 44100
 CHANNELS = 2
 PERIODSIZE = int(44100 / 4) # 0.25s
@@ -20,11 +18,16 @@ audio_arg_parser = argparse.ArgumentParser(add_help=False)
 playback_device_group = audio_arg_parser.add_mutually_exclusive_group()
 playback_device_group.add_argument('--device', '-D', help='alsa output device (deprecated, use --playback_device)', default='default')
 playback_device_group.add_argument('--playback_device', '-o', help='alsa output device (get name from aplay -L)', default='default')
+playback_device_group.add_argument('--port_audio', help='uses PortAudio instead of alsa output. To enable PortAudio use --port_audio on', default='off')
 
 audio_arg_parser.add_argument('--mixer_device_index', help='alsa card index of the mixer device', type=int)
 audio_arg_parser.add_argument('--mixer', '-m', help='alsa mixer name for volume control', default=alsa.mixers()[0])
 audio_arg_parser.add_argument('--dbrange', '-r', help='alsa mixer volume range in Db', default=0)
 args = audio_arg_parser.parse_known_args()[0]
+
+if not args.port_audio == 'off':
+    import pyaudio
+
 
 class PlaybackSession:
 
@@ -56,10 +59,10 @@ class AlsaSink:
                     'mode': alsa.PCM_NORMAL,
                 }
                 if self._args.playback_device != 'default':
-                    pcm_args['device'] = self._args.playback_device
+                    pcm_args['device'] = elf._args.playback_device
                 else:
-                    pcm_args['card'] = self._args.device
-                pcm = alsa.PCM(**pcm_args)
+                   pcm_args['card'] = self._args.device
+                pcm = alsaaudio.PCM(**pcm_args)
 
                 pcm.setchannels(CHANNELS)
                 pcm.setrate(RATE)
@@ -96,8 +99,54 @@ class AlsaSink:
             finally:
                 self._lock.release()
 
+class PortAudioSink:
+    def __init__(self, session, args):
+        self._lock = threading.Lock()
+        self._args = args
+        self._session = session
+        self._stream = None
+
+    def acquire(self):
+        if self._session.is_active():
+            try:
+                p = pyaudio.PyAudio()
+                self._stream = p.open(format=pyaudio.paInt16,
+                           channels=CHANNELS,
+                           rate=RATE,
+                           output=True)
+                print "PortAudioSink: stream acquired"
+            except Exception as error:
+                print "PortAudioSink: unable to acquire stream:", error
+    def release(self):
+        if self._session.is_active() and self._stream is not None:
+            self._lock.acquire()
+            try:
+                if self._stream is not None:
+                    self._stream.close()
+                    self._stream = None
+                    print "PortAudioSink: device released"
+            finally:
+                self._lock.release()
+
+    def write(self, data):
+        if self._session.is_active() and self._stream is not None:
+            # write is asynchronous, so, we are in race with releasing the device
+            self._lock.acquire()
+            try:
+                if self._stream is not None:
+                    self._stream.write(data)
+            except Exception as error:
+                print "Ups! Some badness happened: ", error
+            finally:
+                self._lock.release()
+
+
+
 session = PlaybackSession()
-device = AlsaSink(session, args)
+if args.port_audio == 'off':
+    device = AlsaSink(session, args)
+else:
+    device = PortAudioSink(session, args)
 mixer_card_arg = {}
 if args.mixer_device_index:
     mixer_card_arg['cardindex'] = args.mixer_device_index
@@ -200,6 +249,7 @@ def playback_notify(self, type):
         #audio_flush();
     else:
         print "UNKNOWN PlaybackNotify {}".format(type)
+
 
 def playback_thread(q):
     while True:
