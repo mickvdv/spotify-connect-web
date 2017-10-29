@@ -1,12 +1,12 @@
 from __future__ import division
 import argparse
+import alsaaudio as alsa
 import json
 import Queue
 from threading import Thread
 import threading
 from connect_ffi import ffi, lib
 from lastfm import lastfm
-import alsaaudio as alsa
 RATE = 44100
 CHANNELS = 2
 PERIODSIZE = int(44100 / 4) # 0.25s
@@ -59,10 +59,10 @@ class AlsaSink:
                     'mode': alsa.PCM_NORMAL,
                 }
                 if self._args.playback_device != 'default':
-                    pcm_args['device'] = elf._args.playback_device
+                    pcm_args['device'] = self._args.playback_device
                 else:
-                   pcm_args['card'] = self._args.device
-                pcm = alsaaudio.PCM(**pcm_args)
+                    pcm_args['card'] = self._args.device
+                pcm = alsa.PCM(**pcm_args)
 
                 pcm.setchannels(CHANNELS)
                 pcm.setrate(RATE)
