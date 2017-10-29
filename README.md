@@ -105,6 +105,12 @@ optional arguments:
 Also requires a spotify premium account, and the `spotify_appkey.key` (the binary version) file can be be obtained from https://developer.spotify.com/technologies/libspotify/application-keys/. Fill the 'App-key Request Form' in, send it and wait until you get the key sent via email (it can take a few weeks...).
 
 After receiving it, you need to place it in the python scripts directory, or have the path specified with the `-k` parameter
+## PortAudio
+After I had some troubles with getting the devices right with ALSA. I added support for PortAudio using the PyAudio package.
+```
+python main.py --port_audio on
+```
+Also python-pymedia package has to be installed.
 
 ### Launching from source
 - Running without debug output `LD_LIBRARY_PATH=$PWD python main.py`
