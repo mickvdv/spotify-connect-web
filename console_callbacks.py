@@ -7,12 +7,13 @@ from threading import Thread
 import threading
 from connect_ffi import ffi, lib
 from lastfm import lastfm
+import math
 RATE = 44100
 CHANNELS = 2
 PERIODSIZE = int(44100 / 4) # 0.25s
 SAMPLESIZE = 2 # 16 bit integer
 MAXPERIODS = int(0.5 * RATE / PERIODSIZE) # 0.5s Buffer
-
+VOLUME_LOG_BASE = 2
 audio_arg_parser = argparse.ArgumentParser(add_help=False)
 
 playback_device_group = audio_arg_parser.add_mutually_exclusive_group()
@@ -306,9 +307,11 @@ def playback_volume(self, volume):
         if mute_available and mixer.getmute()[0] ==  1:
             mixer.setmute(0)
             print "Mute deactivated"
-        corected_playback_volume = int(min_volume_range + ((volume / 655.35) * (100 - min_volume_range) / 100))
+        normalized_input_volume = int(volume / 655.35)
+        log_playback_volume = 100 * math.log(normalized_input_volume, VOLUME_LOG_BASE) / math.log(100, VOLUME_LOG_BASE)
+        corected_playback_volume = int(min_volume_range + (log_playback_volume * (100 - min_volume_range) / 100))
         print "corected_playback_volume: {}".format(corected_playback_volume)
-        mixer.setvolume(corected_playback_volume)
+        mixer.setvolume(int(corected_playback_volume))
 
 connection_callbacks = ffi.new('SpConnectionCallbacks *', [
     connection_notify,
